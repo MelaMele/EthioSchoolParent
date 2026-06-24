@@ -1,0 +1,7 @@
+{
+  "name": "school-connect-frontend",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "mkdir -p dist && echo 'Frontend Space' > dist/index.html"
+  }
+}
