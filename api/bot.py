@@ -1,24 +1,23 @@
 import os
-import asyncio
+from fastapi import FastAPI, Request
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart
 from aiogram.types import WebAppInfo, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.storage.memory import MemoryStorage
 
-# ⚠️ ማሳሰቢያ፦ የቦት ቶከኑን በኋላ በ Vercel Environment Variable ውስጥ እናስገባዋለን።
-# ለጊዜው ኮዱ ከሲስተሙ ፈልጎ እንዲያነብ በዚህ መልክ እናዘጋጀዋለን።
+# ቶከኑን ከኢንቫይሮመንት ቫሪያብል ማግኘት
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
+# FastAPI መተግበሪያ መፍጠር (Vercel ይህንን 'app' ይፈልገዋል)
+app = FastAPI()
+
 @dp.message(CommandStart())
 async def start_command(message: types.Message):
-    # በኋላ በ Vercel የሚሰጠንን እውነተኛ ሊንክ እዚህ እንተካዋለን። 
-    # ለጊዜው ለመፈተሽ ጎግልን እናድርገው።
-    web_app_url = "https://google.com" 
+    web_app_url = "https://google.com" # ለጊዜው መፈተኛ
     
-    # ወላጆች ሲጫኑት Mini App የሚከፍት inline button ማዘጋጀት
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -39,16 +38,18 @@ async def start_command(message: types.Message):
     
     await message.answer(welcome_text, reply_markup=keyboard, parse_mode="Markdown")
 
-# Vercel Serverless Function ለዌብሁክ (Webhook) ጥሪዎች የሚጠቀመው ዋና ክፍል
-async def handle_webhook(request_body: dict):
-    update = types.Update.model_validate(request_body, context={"bot": bot})
-    await dp.feed_update(bot, update)
+# ቴሌግራም መልእክት ሲልክ የሚቀበለው endpoint
+@app.post("/api/bot")
+async def telegram_webhook(request: Request):
+    try:
+        json_data = await request.json()
+        update = types.Update.model_validate(json_data, context={"bot": bot})
+        await dp.feed_update(bot, update)
+        return {"status": "ok"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
-# ለVercel WSGI/ASGI ተኳሃኝነት (ይህ የቦቱ መግቢያ መተላለፊያ ነው)
-def handler(request, *args, **kwargs):
-    import json
-    if request.method == "POST":
-        body = json.loads(request.body.decode("utf-8"))
-        asyncio.run(handle_webhook(body))
-        return {"statusCode": 200, "body": "OK"}
-    return {"statusCode": 200, "body": "Method not allowed"}
+# ለብሮውዘር መፈተኛ ቀላል ገጽ
+@app.get("/")
+def read_root():
+    return {"message": "School Connect Bot API is running!"}
