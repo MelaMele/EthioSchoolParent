@@ -13,12 +13,16 @@
   ],
   "routes": [
     {
-      "src": "/api/bot",
+      "src": "/api/(.*)",
       "dest": "api/bot.py"
     },
     {
+      "src": "/assets/(.*)",
+      "dest": "/assets/$1"
+    },
+    {
       "src": "/(.*)",
-      "dest": "/$1"
+      "dest": "/index.html"
     }
   ]
 }
