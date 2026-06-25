@@ -1,5 +1,31 @@
 import os
 import logging
+from supabase import create_client, Client
+
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+# ወላጅ ሲገባ የልጁን መረጃ ከዳታቤዝ አምጥቶ ለFrontend የሚሰጥ አዲስ መስመር
+@app.get("/api/student/{telegram_id}")
+def get_student_data(telegram_id: int):
+    try:
+        # በወላጁ የቴሌግራም ID መሠረት የተማሪውን መረጃ መፈለግ
+        response = supabase.table("students").select("*").eq("parent_telegram_id", telegram_id).execute()
+        if response.data:
+            return {"status": "success", "data": response.data[0]}
+        return {"status": "error", "message": "የተማሪ መረጃ አልተገኘም የወላጅ ID አልተመዘገበም።"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+# የትምህርት ቤት ሜሞዎችን ከዳታቤዝ ማውጫ መስመር
+@app.get("/api/memos")
+def get_memos():
+    try:
+        response = supabase.table("memos").select("*").order("created_at", desc=True).execute()
+        return {"status": "success", "data": response.data}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 from fastapi import FastAPI, Request, Response, status
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart, Command
