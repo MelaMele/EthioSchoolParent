@@ -2,139 +2,115 @@ import React, { useState, useEffect } from 'react';
 import { Loader2, AlertCircle, CheckCircle2, BookOpen, User } from 'lucide-react';
 
 export default function App() {
-  // ከላይ ካሉት State-ዎች ጋር እነዚህን አዳዲስ State-ዎች ጨምር
-const [uploading, setUploading] = useState(false);
-const [selectedFile, setSelectedFile] = useState(null);
-const [uploadSuccess, setUploadSuccess] = useState(false);
+  // ----------------------------------------
+  //  स्टेटስ (States)
+  // ----------------------------------------
+  const [activeTab, setActiveTab] = useState('status');
+  const [userData, setUserData] = useState(null);
+  const [studentData, setStudentData] = useState(null);
+  const [memos, setMemos] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-// የፎቶ ምርጫን ለመቆጣጠር (File Change Handler)
-const handleFileChange = (e) => {
-  if (e.target.files && e.target.files[0]) {
-    setSelectedFile(e.target.files[0]);
-    setUploadSuccess(false);
-  }
-};
+  // የክፍያ ስቴቶች
+  const [uploading, setUploading] = useState(false);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [uploadSuccess, setUploadSuccess] = useState(false);
 
-// ፎቶውን በቀጥታ ወደ Supabase Storage የመስቀያ ፈንክሽን
-const handleUploadPayment = async () => {
-  if (!selectedFile) {
-    alert("እባክዎ መጀመሪያ የደረሰኝ ፎቶ ይምረጡ!");
-    return;
-  }
+  // ----------------------------------------
+  // የፎቶ ምርጫ መቆጣጠሪያ (File Change Handler)
+  // ----------------------------------------
+  const handleFileChange = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      setSelectedFile(e.target.files[0]);
+      setUploadSuccess(false);
+    }
+  };
 
-  setUploading(true);
-  try {
-    const fileExt = selectedFile.name.split('.').pop();
-    const fileName = `${studentData ? studentData.id : 'unknown'}_${Date.now()}.${fileExt}`;
-    const filePath = `${fileName}`;
+  // ----------------------------------------
+  // ፎቶውን ወደ Supabase Storage እና መረጃውን ወደ Table መላኪያ
+  // ----------------------------------------
+  const handleUploadPayment = async () => {
+    if (!selectedFile) {
+      alert("እባክዎ መጀመሪያ የደረሰኝ ፎቶ ይምረጡ!");
+      return;
+    }
 
-    // 1. ፎቶውን ወደ ሱፓቤዝ ባኬት መላክ (የአንተን የሱፓቤዝ URL እና KEY በመጠቀም)
-    const supabaseUrl = "https://oxjawiwunuerekufxykk.supabase.co";
-    const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im94amF3aXd1bnVlcmVrdWZ4eWtrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI0MDMzMTgsImV4cCI6MjA5Nzk3OTMxOH0.dD1714JfdCGkDnLEwF-nApFV6-uWfFYLO-MLv22QKP4";
+    setUploading(true);
+    try {
+      const fileExt = selectedFile.name.split('.').pop();
+      const fileName = `${studentData ? studentData.id : 'unknown'}_${Date.now()}.${fileExt}`;
+      const filePath = `${fileName}`;
 
-    const formData = new FormData();
-    formData.append('cacheControl', '3600');
-    formData.append('file', selectedFile);
+      const supabaseUrl = "https://oxjawiwunuerekufxykk.supabase.co";
+      const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im94amF3aXd1bnVlcmVrdWZ4eWtrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI0MDMzMTgsImV4cCI6MjA5Nzk3OTMxOH0.dD1714JfdCGkDnLEwF-nApFV6-uWfFYLO-MLv22QKP4";
 
-    const uploadRes = await fetch(
-      `${supabaseUrl}/storage/v1/object/payment-receipts/${filePath}`,
-      {
+      const formData = new FormData();
+      formData.append('cacheControl', '3600');
+      formData.append('file', selectedFile);
+
+      // 1. ፎቶውን ወደ Supabase Bucket መጫን
+      const uploadRes = await fetch(
+        `${supabaseUrl}/storage/v1/object/payment-receipts/${filePath}`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${supabaseKey}`,
+            'apikey': supabaseKey
+          },
+          body: formData
+        }
+      );
+
+      if (!uploadRes.ok) throw new Error("ፎቶውን መጫን አልተቻለም");
+
+      // የፎቶውን ሊንክ ማውጣት
+      const publicUrl = `${supabaseUrl}/storage/v1/object/public/payment-receipts/${filePath}`;
+
+      // 2. የክፍያ መረጃውን በሰንጠረዥ ላይ መመዝገብ
+      const paymentData = {
+        parent_telegram_id: userData ? userData.id : 8965161615,
+        student_name: studentData ? studentData.student_name : "ያልታወቀ ተማሪ",
+        screenshot_url: publicUrl,
+        status: "Pending"
+      };
+
+      const dbRes = await fetch(`${supabaseUrl}/rest/v1/payments`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${supabaseKey}`,
-          'apikey': supabaseKey
+          'apikey': supabaseKey,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal'
         },
-        body: formData
+        body: JSON.stringify(paymentData)
+      });
+
+      if (dbRes.ok) {
+        setUploadSuccess(true);
+        setSelectedFile(null);
+        alert("የክፍያ ደረሰኝዎ በትክክል ተልኳል! ለአስተዳዳሪው ይደርሳል።");
       }
-    );
-
-    if (!uploadRes.ok) throw new Error("ፎቶውን መጫን አልተቻለም");
-
-    // የፎቶውን የህዝብ ሊንክ (Public URL) ማመንጨት
-    const publicUrl = `${supabaseUrl}/storage/v1/object/public/payment-receipts/${filePath}`;
-
-    // 2. የክፍያ መረጃውን በሰንጠረዥ (payments table) ላይ መመዝገብ
-    const paymentData = {
-      parent_telegram_id: userData ? userData.id : 8965161615,
-      student_name: studentData ? studentData.student_name : "ያልታወቀ ተማሪ",
-      screenshot_url: publicUrl,
-      status: "Pending"
-    };
-
-    const dbRes = await fetch(`${supabaseUrl}/rest/v1/payments`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${supabaseKey}`,
-        'apikey': supabaseKey,
-        'Content-Type': 'application/json',
-        'Prefer': 'return=minimal'
-      },
-      body: JSON.stringify(paymentData)
-    });
-
-    if (dbRes.ok) {
-      setUploadSuccess(true);
-      setSelectedFile(null);
-      alert("የክፍያ ደረሰኝዎ በትክክል ተልኳል! ለአስተዳዳሪው ይደርሳል።");
+    } catch (err) {
+      alert("ስህተት አጋጥሟል፦ " + err.message);
+    } finally {
+      setUploading(false);
     }
-  } catch (err) {
-    alert("ስህተት አጋጥሟል፦ " + err.message);
-  } finally {
-    setUploading(false);
-  }
-};
+  };
 
-// ----------------------------------------
-// በይነገጽ (UI HTML) - ይህንን ከታች activeTab === 'payment' በሚለው ቦታ ተካው
-// ----------------------------------------
-{activeTab === 'payment' && (
-  <div className="space-y-4">
-    <div className="bg-slate-900 p-4 rounded-2xl border border-slate-800 shadow-lg text-center">
-      <h3 className="font-bold text-slate-200 mb-1 text-sm">💵 የባንክ ክፍያ ማረጋገጫ</h3>
-      <p className="text-xs text-slate-400 mb-4">እባክዎ የከፈሉበትን የባንክ ደረሰኝ ፎቶ (Screenshot) እዚህ ያያይዙ።</p>
-      
-      <label className="border-2 border-dashed border-slate-800 hover:border-emerald-500 bg-slate-800/20 rounded-xl p-8 cursor-pointer transition-all block relative">
-        <input 
-          type="file" 
-          accept="image/*" 
-          onChange={handleFileChange} 
-          className="hidden" 
-        />
-        <span className="text-3xl block mb-2">📸</span>
-        <span className="text-xs text-slate-400 block">
-          {selectedFile ? `የተመረጠው ፎቶ፦ ${selectedFile.name}` : "የደረሰኝ ፎቶ ለመምረጥ እዚህ ይጫኑ"}
-        </span>
-      </label>
-      
-      {uploadSuccess && (
-        <p className="text-emerald-400 text-xs mt-2 font-medium">✓ ደረሰኙ በተሳካ ሁኔታ ተልኳል!</p>
-      )}
-
-      <button 
-        onClick={handleUploadPayment}
-        disabled={uploading}
-        className="w-full mt-4 bg-emerald-500 hover:bg-emerald-600 disabled:bg-slate-700 disabled:text-slate-500 active:scale-[0.98] text-slate-950 py-3 rounded-xl font-bold text-sm transition-all shadow-md"
-      >
-        {uploading ? "በመላክ ላይ..." : "ማረጋገጫውን ወደ ትምህርት ቤት ላክ"}
-      </button>
-    </div>
-  </div>
-)}
-
-  // 1. ከቴሌግራም የገባውን ተጠቃሚ መረጃ ማግኘት
+  // ----------------------------------------
+  // የቴሌግራም መረጃ ማግኛ ማሰሪያ (useEffect)
+  // ----------------------------------------
   useEffect(() => {
     if (window.Telegram && window.Telegram.WebApp) {
       const user = window.Telegram.WebApp.initDataUnsafe?.user;
       if (user) {
         setUserData(user);
-        // የተማሪውን እና የሜሞ መረጃዎችን ከ API መጫን
         fetchStudentAndMemos(user.id);
       } else {
-        // ለሙከራ ያህል (በብሮውዘር ስንከፍተው እንዲሰራልን - የእርስዎን Telegram ID እዚህ መተካት ይችላሉ)
         fetchStudentAndMemos(8965161615); 
       }
     } else {
-      // ለሙከራ ያህል (በኮምፒውተር ብሮውዘር ስንከፍተው)
       fetchStudentAndMemos(8965161615);
     }
   }, []);
@@ -142,7 +118,6 @@ const handleUploadPayment = async () => {
   const fetchStudentAndMemos = async (telegramId) => {
     setLoading(true);
     try {
-      // የተማሪ መረጃ ከቪርሴል API መጥራት
       const studentRes = await fetch(`/api/student/${telegramId}`);
       const studentJson = await studentRes.json();
       
@@ -152,7 +127,6 @@ const handleUploadPayment = async () => {
         setError(studentJson.message);
       }
 
-      // የሜሞዎች መረጃ ከቪርሴል API መጥራት
       const memoRes = await fetch('/api/memos');
       const memoJson = await memoRes.json();
       if (memoJson.status === 'success') {
@@ -177,7 +151,7 @@ const handleUploadPayment = async () => {
   return (
     <div className="flex flex-col min-h-screen bg-slate-950 text-white font-sans max-w-md mx-auto relative border-x border-slate-800">
       
-      {/* 🔝 የላይኛው መግቢያ (Header) */}
+      {/* Header */}
       <div className="p-4 bg-slate-900 border-b border-slate-800 flex items-center justify-between sticky top-0 z-10">
         <div>
           <h1 className="text-xl font-bold text-emerald-400">🏡 የወላጅ ፖርታል</h1>
@@ -190,7 +164,7 @@ const handleUploadPayment = async () => {
         </span>
       </div>
 
-      {/* 📱 ዋናው የይዘት ክፍል (Tabs Content Area) */}
+      {/* Main Content Area */}
       <div className="flex-1 p-4 pb-24 overflow-y-auto">
         
         {error && (
@@ -200,7 +174,7 @@ const handleUploadPayment = async () => {
           </div>
         )}
 
-        {/* 1️⃣ ታብ ፦ የተማሪ ሁኔታ (Student Status) */}
+        {/* 1️⃣ ታብ ፦ የተማሪ ሁኔታ */}
         {activeTab === 'status' && studentData && (
           <div className="space-y-4">
             <div className="bg-slate-900 p-4 rounded-2xl border border-slate-800 shadow-lg">
@@ -238,26 +212,42 @@ const handleUploadPayment = async () => {
           </div>
         )}
 
-        {/* 2️⃣ ታብ ፦ የክፍያ ስክሪንሾት መላኪያ */}
+        {/* 2️⃣ ታብ ፦ የክፍያ ስክሪንሾት መላኪያ (የተስተካከለው) */}
         {activeTab === 'payment' && (
           <div className="space-y-4">
             <div className="bg-slate-900 p-4 rounded-2xl border border-slate-800 shadow-lg text-center">
               <h3 className="font-bold text-slate-200 mb-1 text-sm">💵 የባንክ ክፍያ ማረጋገጫ</h3>
               <p className="text-xs text-slate-400 mb-4">እባክዎ የከፈሉበትን የባንክ ደረሰኝ ፎቶ (Screenshot) እዚህ ያያይዙ።</p>
               
-              <div className="border-2 border-dashed border-slate-800 hover:border-emerald-500 bg-slate-800/20 rounded-xl p-8 cursor-pointer transition-all">
+              <label className="border-2 border-dashed border-slate-800 hover:border-emerald-500 bg-slate-800/20 rounded-xl p-8 cursor-pointer transition-all block relative">
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  onChange={handleFileChange} 
+                  className="hidden" 
+                />
                 <span className="text-3xl block mb-2">📸</span>
-                <span className="text-xs text-slate-400">የደረሰኝ ፎቶ ለመምረጥ እዚህ ይጫኑ</span>
-              </div>
+                <span className="text-xs text-slate-400 block">
+                  {selectedFile ? `የተመረጠው ፎቶ፦ ${selectedFile.name}` : "የደረሰኝ ፎቶ ለመምረጥ እዚህ ይጫኑ"}
+                </span>
+              </label>
               
-              <button className="w-full mt-4 bg-emerald-500 hover:bg-emerald-600 active:scale-[0.98] text-slate-950 py-3 rounded-xl font-bold text-sm transition-all shadow-md">
-                ማረጋገጫውን ወደ ትምህርት ቤት ላክ
+              {uploadSuccess && (
+                <p className="text-emerald-400 text-xs mt-2 font-medium">✓ ደረሰኙ በተሳካ ሁኔታ ተልኳል!</p>
+              )}
+
+              <button 
+                onClick={handleUploadPayment}
+                disabled={uploading}
+                className="w-full mt-4 bg-emerald-500 hover:bg-emerald-600 disabled:bg-slate-700 disabled:text-slate-500 active:scale-[0.98] text-slate-950 py-3 rounded-xl font-bold text-sm transition-all shadow-md"
+              >
+                {uploading ? "በመላክ ላይ..." : "ማረጋገጫውን ወደ ትምህርት ቤት ላክ"}
               </button>
             </div>
           </div>
         )}
 
-        {/* 3️⃣ ታብ ፦ ሜሞ እና መልእክት (ከዳታቤዝ የሚነበብ) */}
+        {/* 3️⃣ ታብ ፦ ሜሞ እና መልእክት */}
         {activeTab === 'memo' && (
           <div className="space-y-3">
             {memos.length === 0 ? (
@@ -280,7 +270,7 @@ const handleUploadPayment = async () => {
 
       </div>
 
-      {/* 🧭 የታችኛው መቆጣጠሪያ (Bottom Navigation) */}
+      {/* Bottom Navigation */}
       <div className="absolute bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 grid grid-cols-3 p-2 rounded-t-2xl shadow-xl z-10">
         <button onClick={() => setActiveTab('status')} className={`flex flex-col items-center p-2 rounded-xl transition-all ${activeTab === 'status' ? 'text-emerald-400 bg-slate-800' : 'text-slate-500'}`}>
           <span className="text-xl">📊</span>
@@ -288,7 +278,7 @@ const handleUploadPayment = async () => {
         </button>
         <button onClick={() => setActiveTab('payment')} className={`flex flex-col items-center p-2 rounded-xl transition-all ${activeTab === 'payment' ? 'text-emerald-400 bg-slate-800' : 'text-slate-500'}`}>
           <span className="text-xl">💳</span>
-          <span className="text-[11px] mt-1 font-medium">ክፍያ</span>
+          <span className="text-[11px] mt-1 font-medium">ክክፍያ</span>
         </button>
         <button onClick={() => setActiveTab('memo')} className={`flex flex-col items-center p-2 rounded-xl transition-all ${activeTab === 'memo' ? 'text-emerald-400 bg-slate-800' : 'text-slate-500'}`}>
           <span className="text-xl">🔔</span>
