@@ -13,8 +13,10 @@ logger = logging.getLogger(__name__)
 # Environment Variables
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+# የሱፓቤዝ ቁልፎችን በቀጥታ በኮዱ ውስጥ ማስተሳሰር
+SUPABASE_URL = "https://oxjawiwunuerekufxykk.supabase.co"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im94amF3aXd1bnVlcmVrdWZ4eWtrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI0MDMzMTgsImV4cCI6MjA5Nzk3OTMxOH0.dD1714JfdCGkDnLEwF-nApFV6-uWfFYLO-MLv22QKP4"
 
 app = FastAPI()
 
