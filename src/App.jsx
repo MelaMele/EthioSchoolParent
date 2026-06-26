@@ -2,12 +2,124 @@ import React, { useState, useEffect } from 'react';
 import { Loader2, AlertCircle, CheckCircle2, BookOpen, User } from 'lucide-react';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('status');
-  const [userData, setUserData] = useState(null);
-  const [studentData, setStudentData] = useState(null);
-  const [memos, setMemos] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  // ከላይ ካሉት State-ዎች ጋር እነዚህን አዳዲስ State-ዎች ጨምር
+const [uploading, setUploading] = useState(false);
+const [selectedFile, setSelectedFile] = useState(null);
+const [uploadSuccess, setUploadSuccess] = useState(false);
+
+// የፎቶ ምርጫን ለመቆጣጠር (File Change Handler)
+const handleFileChange = (e) => {
+  if (e.target.files && e.target.files[0]) {
+    setSelectedFile(e.target.files[0]);
+    setUploadSuccess(false);
+  }
+};
+
+// ፎቶውን በቀጥታ ወደ Supabase Storage የመስቀያ ፈንክሽን
+const handleUploadPayment = async () => {
+  if (!selectedFile) {
+    alert("እባክዎ መጀመሪያ የደረሰኝ ፎቶ ይምረጡ!");
+    return;
+  }
+
+  setUploading(true);
+  try {
+    const fileExt = selectedFile.name.split('.').pop();
+    const fileName = `${studentData ? studentData.id : 'unknown'}_${Date.now()}.${fileExt}`;
+    const filePath = `${fileName}`;
+
+    // 1. ፎቶውን ወደ ሱፓቤዝ ባኬት መላክ (የአንተን የሱፓቤዝ URL እና KEY በመጠቀም)
+    const supabaseUrl = "https://oxjawiwunuerekufxykk.supabase.co";
+    const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im94amF3aXd1bnVlcmVrdWZ4eWtrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI0MDMzMTgsImV4cCI6MjA5Nzk3OTMxOH0.dD1714JfdCGkDnLEwF-nApFV6-uWfFYLO-MLv22QKP4";
+
+    const formData = new FormData();
+    formData.append('cacheControl', '3600');
+    formData.append('file', selectedFile);
+
+    const uploadRes = await fetch(
+      `${supabaseUrl}/storage/v1/object/payment-receipts/${filePath}`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${supabaseKey}`,
+          'apikey': supabaseKey
+        },
+        body: formData
+      }
+    );
+
+    if (!uploadRes.ok) throw new Error("ፎቶውን መጫን አልተቻለም");
+
+    // የፎቶውን የህዝብ ሊንክ (Public URL) ማመንጨት
+    const publicUrl = `${supabaseUrl}/storage/v1/object/public/payment-receipts/${filePath}`;
+
+    // 2. የክፍያ መረጃውን በሰንጠረዥ (payments table) ላይ መመዝገብ
+    const paymentData = {
+      parent_telegram_id: userData ? userData.id : 8965161615,
+      student_name: studentData ? studentData.student_name : "ያልታወቀ ተማሪ",
+      screenshot_url: publicUrl,
+      status: "Pending"
+    };
+
+    const dbRes = await fetch(`${supabaseUrl}/rest/v1/payments`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${supabaseKey}`,
+        'apikey': supabaseKey,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify(paymentData)
+    });
+
+    if (dbRes.ok) {
+      setUploadSuccess(true);
+      setSelectedFile(null);
+      alert("የክፍያ ደረሰኝዎ በትክክል ተልኳል! ለአስተዳዳሪው ይደርሳል።");
+    }
+  } catch (err) {
+    alert("ስህተት አጋጥሟል፦ " + err.message);
+  } finally {
+    setUploading(false);
+  }
+};
+
+// ----------------------------------------
+// በይነገጽ (UI HTML) - ይህንን ከታች activeTab === 'payment' በሚለው ቦታ ተካው
+// ----------------------------------------
+{activeTab === 'payment' && (
+  <div className="space-y-4">
+    <div className="bg-slate-900 p-4 rounded-2xl border border-slate-800 shadow-lg text-center">
+      <h3 className="font-bold text-slate-200 mb-1 text-sm">💵 የባንክ ክፍያ ማረጋገጫ</h3>
+      <p className="text-xs text-slate-400 mb-4">እባክዎ የከፈሉበትን የባንክ ደረሰኝ ፎቶ (Screenshot) እዚህ ያያይዙ።</p>
+      
+      <label className="border-2 border-dashed border-slate-800 hover:border-emerald-500 bg-slate-800/20 rounded-xl p-8 cursor-pointer transition-all block relative">
+        <input 
+          type="file" 
+          accept="image/*" 
+          onChange={handleFileChange} 
+          className="hidden" 
+        />
+        <span className="text-3xl block mb-2">📸</span>
+        <span className="text-xs text-slate-400 block">
+          {selectedFile ? `የተመረጠው ፎቶ፦ ${selectedFile.name}` : "የደረሰኝ ፎቶ ለመምረጥ እዚህ ይጫኑ"}
+        </span>
+      </label>
+      
+      {uploadSuccess && (
+        <p className="text-emerald-400 text-xs mt-2 font-medium">✓ ደረሰኙ በተሳካ ሁኔታ ተልኳል!</p>
+      )}
+
+      <button 
+        onClick={handleUploadPayment}
+        disabled={uploading}
+        className="w-full mt-4 bg-emerald-500 hover:bg-emerald-600 disabled:bg-slate-700 disabled:text-slate-500 active:scale-[0.98] text-slate-950 py-3 rounded-xl font-bold text-sm transition-all shadow-md"
+      >
+        {uploading ? "በመላክ ላይ..." : "ማረጋገጫውን ወደ ትምህርት ቤት ላክ"}
+      </button>
+    </div>
+  </div>
+)}
 
   // 1. ከቴሌግራም የገባውን ተጠቃሚ መረጃ ማግኘት
   useEffect(() => {
